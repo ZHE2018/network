@@ -95,11 +95,17 @@ class Network(object):
         self.biases = [b - (eta / len(mini_batch)) * nb for b, nb in zip(self.biases, nabla_b)]
 
     def evaluate(self, test_data):
+        """
+        评估当前神经网络，返回判断正确的样本数
+        :param test_data: 用于评估的数据集
+        :return: 数据集中判断正确的样本数量
+        """
         test_result = [(np.argmax(self.feedforward(x)), y) for x, y in test_data]
         return sum(int(x == y) for x, y in test_result)
 
     def SGD(self, training_data, epochs, mini_batch_size, eta, test_data=None):
         """
+        加载训练数据集对网络进行训练，可接受测试数据集评估每一个周期的效果，但这会消耗更多时间
         :param training_data: 一个（x,y）元组的列表，x 表示输入，y 表示期望的输出
         :param epochs:   训练的周期
         :param mini_batch_size:  小批量训练数据大小
@@ -109,6 +115,7 @@ class Network(object):
         """
         if test_data != None:
             n_test = len(test_data)
+
         n = len(training_data)  # n:测试数据集的大小
         for j in range(epochs):
             # 打乱训练数据
@@ -121,22 +128,24 @@ class Network(object):
             # 打印进展
             if test_data != None:
                 num = self.evaluate(test_data)
-                print("周期:{0}  {1}/{2} {3}%".format(j, num, n_test, num / n_test * 100))
+                print("周期:{0}  {1}/{2} {3}%".format(j+1, num, n_test, num / n_test * 100))
             else:
                 print("周期{0}完成！".format(j))
 
 
 if __name__ == "__main__":
+    # 加载数据
     training_data = np.load('training_data.npy', allow_pickle=True)
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
-
-    net = Network([784, 30, 30, 10])
-
-    net.SGD(training_data, 3, 10, 3)
-
-    n_validation = len(validation_data)
-    num = net.evaluate(validation_data)
+    # 创建神经网络
+    net = Network([784, 30, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+    # 加载训练数据训练
+    net.SGD(training_data, 3, 10, 3)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+    # 加载验证数据集对网络效果进行验证
+    n_validation = len(validation_data)  # 获得验证数据集大小
+    num = net.evaluate(validation_data)  # 获得评估正确样本数
+    # 打印结果
     print("验证：{0}/{1} {2}%".format(num, n_validation, num / n_validation * 100))
 
     # 计算随机猜测的概率：10%左右
