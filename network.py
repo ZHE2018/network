@@ -1,21 +1,24 @@
 import numpy as np
 
 
+# 将输出压缩成激活值得函数
 def sigmoid(z):
     return 1 / (1 + np.exp(-z))
 
 
+# sigmoid 的导函数
 def sigmoid_prime(z):
     return sigmoid(z) * (1 - sigmoid(z))
 
 
 class Network(object):
     def __init__(self, sizes):
-        self.num_layers = len(sizes)
-        self.sizes = sizes[1:]
+        self.num_layers = len(sizes)  # 网络中包含的层数（包括并不存在的输入层）
+        self.sizes = sizes[1:]  # 各层网络节点数（不包含不存在的输入层）
         # 第一层为输入层，没有权重和偏执
-        self.biases = [np.random.randn(y) for y in sizes[1:]]
+        self.biases = [np.random.randn(y) for y in sizes[1:]]  # 二维数组：self.biases[i][j] 为第i+2层、第j+1个节点的偏置
         self.weights = [np.random.randn(y, x) for x, y in zip(sizes[:-1], sizes[1:])]
+        # 权重为三维数组：self.weights[i][j] 为第i+2层、第j+1个节点的权重向量，向量维度为前一层的输出向量维度
 
     def feedforward(self, a):
         """
@@ -36,7 +39,8 @@ class Network(object):
         :return: 返回一个代表差异的向量，分别表示 0-9 的差异，正值表示比期望大，负值表示比期望小，
                  绝对值表示偏离期望的程度（修改的优先级）
         """
-        # 由于输出的期望是[0,0,0,0,0,0,0,0,0,0][y]=1,
+        # 由于期望输出向量是[0,0,0,0,0,0,0,0,0,0][y]=1,
+        # 这里避免额外的向量计算，直接计算 output_activation - 期望输出向量
         output_activation = output_activation[:]
         output_activation[y] -= 1
         return output_activation
@@ -52,10 +56,11 @@ class Network(object):
         # 这里构造一个存储权重 和 偏置 改变量（梯度）的容器，初始化为0
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
-        activation = x
-        activations = [x]
-        zs = []
-        # 这里模拟一个前向传播的过程，将每一层的输出（未压缩）保存在zs中，压缩后的激活值保存在activations
+        activation = x  # 当前层输入的激活向量
+        activations = [x]  # 保存压缩后的激活值 （x 为输入层的激活值）
+        zs = []  # 保存每一层的输出（未压缩）
+
+        # 这里模拟一个前向传播的过程，将每一层的输出（未压缩）保存在zs中，压缩后的激活值（作为下一层的输入）保存在activations
         for b, w in zip(self.biases, self.weights):
             z = np.dot(w, activation) + b
             zs.append(z)
@@ -128,7 +133,7 @@ class Network(object):
             # 打印进展
             if test_data != None:
                 num = self.evaluate(test_data)
-                print("周期:{0}  {1}/{2} {3}%".format(j+1, num, n_test, num / n_test * 100))
+                print("周期:{0}  {1}/{2} {3}%".format(j + 1, num, n_test, num / n_test * 100))
             else:
                 print("周期{0}完成！".format(j))
 
