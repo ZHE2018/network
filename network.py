@@ -20,6 +20,41 @@ class Network(object):
         self.weights = [np.random.randn(y, x) for x, y in zip(sizes[:-1], sizes[1:])]
         # 权重为三维数组：self.weights[i][j] 为第i+2层、第j+1个节点的权重向量，向量维度为前一层的输出向量维度
 
+    def save(self, file_name: str):
+        """
+        保存当前网络参数数据：以（权重向量，偏置）的二维数组方式保存
+        :param file_name: 保存的文件名，不含后缀
+        :return: None
+        """
+        data = []
+        for b, w in zip(self.biases, self.weights):
+            layer = []
+            for bj, wj in zip(b, w):
+                layer.append((wj, bj))
+            data.append(layer)
+        data = np.array(data)
+        np.save(file_name, data)
+
+    def load(self, file_name: str):
+        """
+        从文件中读取数据并初始化当前网络，改变网络结构并丢弃所有参数
+        :param file_name: save()保存的文件不包含后缀
+        :return:None
+        """
+        data = np.load(file_name + '.npy', allow_pickle=True)
+        self.num_layers = len(data) + 1
+        self.sizes = [len(l) for l in data]
+        self.biases = []
+        self.weights = []
+        for layer in data:
+            vb = []
+            vw = []
+            for w, b in layer:
+                vb.append(b)
+                vw.append(w)
+            self.biases.append(vb)
+            self.weights.append(vw)
+
     def feedforward(self, a):
         """
         :param a: 输入值：一个向量
@@ -159,19 +194,21 @@ if __name__ == "__main__":
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
     # 创建神经网络
-    net = Network([784, 90,  20, 10])  # 输入层784 输出层10 固定，其他层可以任意
+    net = Network([784, 30, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+
     # 加载训练数据训练
-    net.SGD(training_data, 3, 10, 3)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+    net.SGD(training_data, 30, 10, 3, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+
     # 加载验证数据集对网络效果进行验证
     n_validation = len(validation_data)  # 获得验证数据集大小
     num = net.evaluate(validation_data)  # 获得评估正确样本数
     # 打印结果
     print("验证：{0}/{1} {2}%".format(num, n_validation, num / n_validation * 100))
-
+    net.save('net_data')
+    # net.save('net_data')
     # 计算随机猜测的概率：10%左右
     # num = net.evaluate(test_data)
     # n_test = len(test_data)
     # print("{0}/{1} {2}%".format(num, n_test, num / n_test * 100))
     # for x, y in test_data:
     #     print(np.argmax(net.feedforward(x)), y)
-
