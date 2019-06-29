@@ -33,7 +33,7 @@ class Network(object):
     @staticmethod
     def cost_derivative(output_activation, y):
         """
-        计算输出与预期的差异：既代价函数
+        计算输出与预期的差异：既输出的关于输出的偏导数
         :param output_activation: 网络的实际输出，是一个十维的向量，0-9 的激活值
         :param y: 预期输出：在这里是一个整数值：0-9
         :return: 返回一个代表差异的向量，分别表示 0-9 的差异，正值表示比期望大，负值表示比期望小，
@@ -67,14 +67,29 @@ class Network(object):
             activation = sigmoid(z)
             activations.append(activation)
 
-        delta = self.cost_derivative(activations[-1], y) * sigmoid_prime(zs[-1])
-        nabla_b[-1] = delta
+        # 反向传播核心算法
+        """
+        反向传播：
+        cost_derivative()计算输出层的梯度，对应输出层各个节点输出值的误差，
+        为减少各个节点误差：（误差为正表示输出应当减小，反之增加，以下说明以误差为正值为前提）
+            1.调整权重：减小该节点所有正输入对应权重，增加所有负输入对应权重
+            2.减小偏置
+            3.调整上一层的输出：减少正权重对应输出，增加负权重对应输出（反向传递）
+        此外：不同误差表示调整该节点的性价比，误差很小意味着该节点输出很接近期望，即没必要调整，反之则意味着调整的性价比很高
+             相应计算出的对应梯度绝对值大小表示调整的性价比
+        """
+        # 核心方程 README.md
+        delta = self.cost_derivative(activations[-1], y) * sigmoid_prime(zs[-1])  # 根据方程 (1) 计算输出层误差向量
 
-        nabla_w[-1] = np.dot(delta.reshape(10, 1), activations[-2].reshape(1, 30))
+        nabla_b[-1] = delta  # 根据方程(3) 误差向量即偏置的梯度
+        # 根据方程 (4) 计算输出层权重梯度
+        # reshape()是为了将向量转化为矩阵(单行或单列)，做矩阵乘法
+        nabla_w[-1] = np.dot(delta.reshape(10, 1), activations[-2].reshape(1, len(activations[-2])))
+        # 输出层梯度计算完毕，这里从倒数第二层反向计算所有层梯度（不包含输入层）
         for l in range(2, self.num_layers):
             z = zs[-l]
-            sp = sigmoid_prime(z)
-            delta = np.dot(self.weights[-l + 1].transpose(), delta) * sp
+            delta = np.dot(self.weights[-l + 1].transpose(), delta) * sigmoid_prime(z)  # 方程(2), 计算前一层误差
+            # 原理与计算输出层相同
             nabla_b[-l] = delta
             nabla_w[-l] = np.dot(delta.reshape(len(delta), 1), activations[-l - 1].reshape(1, len(activations[-l - 1])))
         return nabla_b, nabla_w
@@ -135,7 +150,7 @@ class Network(object):
                 num = self.evaluate(test_data)
                 print("周期:{0}  {1}/{2} {3}%".format(j + 1, num, n_test, num / n_test * 100))
             else:
-                print("周期{0}完成！".format(j))
+                print("周期 {0}  完成！".format(j + 1))
 
 
 if __name__ == "__main__":
@@ -144,7 +159,7 @@ if __name__ == "__main__":
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
     # 创建神经网络
-    net = Network([784, 30, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+    net = Network([784, 90,  20, 10])  # 输入层784 输出层10 固定，其他层可以任意
     # 加载训练数据训练
     net.SGD(training_data, 3, 10, 3)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
     # 加载验证数据集对网络效果进行验证
@@ -157,11 +172,6 @@ if __name__ == "__main__":
     # num = net.evaluate(test_data)
     # n_test = len(test_data)
     # print("{0}/{1} {2}%".format(num, n_test, num / n_test * 100))
-
-    # training_data = np.load('test_data.npy', allow_pickle=True)
     # for x, y in test_data:
     #     print(np.argmax(net.feedforward(x)), y)
 
-    # x = np.linspace(-10, 10, 100)
-    # plt.plot(x, sigmoid_prime(x))
-    # plt.show()
