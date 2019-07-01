@@ -68,11 +68,18 @@ class Network(object):
     @staticmethod
     def cost_derivative(output_activation, y):
         """
-        计算输出与预期的差异：既输出的关于输出的偏导数
+
+        根据方程 (1) 计算输出层的误差：
         :param output_activation: 网络的实际输出，是一个十维的向量，0-9 的激活值
         :param y: 预期输出：在这里是一个整数值：0-9
         :return: 返回一个代表差异的向量，分别表示 0-9 的差异，正值表示比期望大，负值表示比期望小，
                  绝对值表示偏离期望的程度（修改的优先级）
+
+        此处采用二次代价：
+        对于单个样本：
+        二次代价 C_x = \frac{(y-a)^2}{2}
+                a = \sigma(z)
+                \delta^L= a - y
         """
         # 由于期望输出向量是[0,0,0,0,0,0,0,0,0,0][y]=1,
         # 这里避免额外的向量计算，直接计算 output_activation - 期望输出向量
@@ -118,14 +125,15 @@ class Network(object):
 
         nabla_b[-1] = delta  # 根据方程(3) 误差向量即偏置的梯度
         # 根据方程 (4) 计算输出层权重梯度
-        # reshape()是为了将向量转化为矩阵(单行或单列)，做矩阵乘法
+        # reshape()是为了将向量转化为矩阵(只有二维向量支持矩阵运算)(单行或单列)，做矩阵乘法
         nabla_w[-1] = np.dot(delta.reshape(10, 1), activations[-2].reshape(1, len(activations[-2])))
         # 输出层梯度计算完毕，这里从倒数第二层反向计算所有层梯度（不包含输入层）
         for l in range(2, self.num_layers):
             z = zs[-l]
-            delta = np.dot(self.weights[-l + 1].transpose(), delta) * sigmoid_prime(z)  # 方程(2), 计算前一层误差
+            delta = np.dot(self.weights[-l + 1].transpose(), delta) * sigmoid_prime(z)  # -l 层误差计算使用方程 (2) 由下一层表示当前层
             # 原理与计算输出层相同
             nabla_b[-l] = delta
+            # 方程 (4)
             nabla_w[-l] = np.dot(delta.reshape(len(delta), 1), activations[-l - 1].reshape(1, len(activations[-l - 1])))
         return nabla_b, nabla_w
 
@@ -194,10 +202,10 @@ if __name__ == "__main__":
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
     # 创建神经网络
-    net = Network([784, 30, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+    net = Network([784, 90, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
 
     # 加载训练数据训练
-    net.SGD(training_data, 30, 10, 3, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+    net.SGD(training_data, 30, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
 
     # 加载验证数据集对网络效果进行验证
     n_validation = len(validation_data)  # 获得验证数据集大小
