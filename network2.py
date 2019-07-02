@@ -240,6 +240,42 @@ class Network(object):
         cost += 0.5 * (lmbda / len(data)) * sum(np.linalg.norm(w) ** 2 for w in self.weights)  # 规范化项
         return cost
 
+    def save(self, file_name: str):
+        """
+        保存当前网络参数数据：以（权重向量，偏置）的二维数组方式保存
+        :param file_name: 保存的文件名，不含后缀
+        :return: None
+        """
+        data = []
+        for b, w in zip(self.biases, self.weights):
+            layer = []
+            for bj, wj in zip(b, w):
+                layer.append((wj, bj))
+            data.append(layer)
+        data = np.array(data)
+        np.save(file_name, data)
+
+    def load(self, file_name: str):
+        """
+        从文件中读取数据并初始化当前网络，改变网络结构并丢弃所有参数
+        :param file_name: save()保存的文件不包含后缀
+        :return:None
+        """
+        data = np.load(file_name + '.npy', allow_pickle=True)
+        self.num_layers = len(data) + 1
+        self.sizes = [len(l) for l in data]
+        self.biases = []
+        self.weights = []
+        for layer in data:
+            vb = []
+            vw = []
+            for w, b in layer:
+                vb.append(b)
+                vw.append(w)
+            self.biases.append(vb)
+            self.weights.append(vw)
+
+
 
 def sigmoid(z):
     return 1.0 / (1.0 + np.exp(-z))
