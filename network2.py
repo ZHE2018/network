@@ -192,8 +192,8 @@ class Network(object):
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
         # 这里模拟一个前向传播的过程，将每一层的输出（未压缩）保存在zs中，压缩后的激活值（作为下一层的输入）保存在activations
-        activation = x
-        activations = [x]
+        activation = np.array(x)
+        activations = [activation]
         zs = []
         for b, w in zip(self.biases, self.weights):
             z = np.dot(w, activation) + b
@@ -271,10 +271,9 @@ class Network(object):
             vw = []
             for w, b in layer:
                 vb.append(b)
-                vw.append(w)
-            self.biases.append(vb)
-            self.weights.append(vw)
-
+                vw.append(np.array(w))
+            self.biases.append(np.array(vb))
+            self.weights.append(np.array(vw))
 
 
 def sigmoid(z):
@@ -291,24 +290,26 @@ if __name__ == '__main__':
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
 
-    net = Network([784, 10])
-    epo = 20
+    net = Network([784, 30, 10])
+    epo = 500
     eta = 0.02
-    lmbda = 2
+    lmbda = 5
 
     # 加载训练数据训练
-    evaluation_cost, evaluation_accuracy, training_cost, training_accuracy = net.SGD(training_data, epo, 10, eta,
-                                                                                     lmbda=lmbda,
-                                                                                     evaluation_data=validation_data,
-                                                                                     monitor_evaluation_accuracy=True,
-                                                                                     monitor_evaluation_cost=True,
-                                                                                     monitor_training_accuracy=True,
-                                                                                     monitor_training_cost=True,
-                                                                                     # auto_stop=True,
-                                                                                     # stop_delay=4
-                                                                                     )
+    # 取得监控数据
+    evaluation_cost, evaluation_accuracy, training_cost, training_accuracy = \
+        net.SGD(training_data, epo, 10, eta,
+                lmbda=lmbda,
+                evaluation_data=validation_data,
+                monitor_evaluation_accuracy=True,
+                monitor_evaluation_cost=True,
+                monitor_training_accuracy=True,
+                monitor_training_cost=True,
+                # stop_delay=4
+                )
+    # 监控数据可视化
     import matplotlib.pyplot as plt
-
+    # 解决中文问题
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 步骤一（替换sans-serif字体）
     plt.rcParams['axes.unicode_minus'] = False  # 步骤二（解决坐标轴负数的负号显示问题）
 
@@ -319,6 +320,7 @@ if __name__ == '__main__':
     plt.title('代价')
     plt.plot(x, training_cost)
     plt.plot(x, evaluation_cost)
+    plt.xlabel('周期')
     plt.legend(['训练数据集', '估测数据集'])
 
     fig.add_subplot(222)
@@ -337,11 +339,4 @@ if __name__ == '__main__':
     plt.plot(x, [t / len(training_data) - v / len(validation_data) for t, v in
                  zip(training_accuracy, evaluation_accuracy)])
     plt.legend(['训练-估测'])
-    # axs[0].plot(training_cost, label='training cost')
-    # axs[0].plot(evaluation_cost, label='evaluation cost')
-    #
-    # axs[1].plot([x / 50000 for x in training_accuracy], label='training accuracy')
-    # axs[1].plot([x / 10000 for x in evaluation_accuracy], label='evaluation accuracy')
-    #
-    # plt.title('学习速率：{}，规范化参数：{}'.format(eta, lmbda))
     plt.show()
