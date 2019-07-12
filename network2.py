@@ -1,5 +1,11 @@
 import numpy as np
 
+"""
+network2 的主要改进体现在学习算法上，前向传播没有变化，
+因此更适合用类训练网络参数，其网络参数通用
+network2 仍然保持独立性，因此部分代码与network1 中的重复，故不做多余注释
+"""
+
 
 # 二次代价函数
 class QuadraticCost(object):
@@ -286,14 +292,25 @@ def sigmoid_prime(z):
 
 if __name__ == '__main__':
     # 加载数据
+    from my_data import my_data
+    from data_enhance import get_enhance_data
+
+    # my_data = get_enhance_data(my_data)
+
     training_data = np.load('training_data.npy', allow_pickle=True)
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
 
     net = Network([784, 30, 10])
-    epo = 500
-    eta = 0.02
-    lmbda = 5
+    net.load('net_data_3_3')
+
+    training_data = my_data
+    validation_data = validation_data[:500]
+    # validation_data = my_data[:500]
+    print('加载网络完成')
+    epo = 40
+    eta = 0.005
+    lmbda = 2
 
     # 加载训练数据训练
     # 取得监控数据
@@ -308,7 +325,11 @@ if __name__ == '__main__':
                 # stop_delay=4
                 )
     # 监控数据可视化
+
+    net.save('net_data_3_4')
+
     import matplotlib.pyplot as plt
+
     # 解决中文问题
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 步骤一（替换sans-serif字体）
     plt.rcParams['axes.unicode_minus'] = False  # 步骤二（解决坐标轴负数的负号显示问题）
