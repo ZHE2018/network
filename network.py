@@ -51,9 +51,9 @@ class Network(object):
             vw = []
             for w, b in layer:
                 vb.append(b)
-                vw.append(w)
-            self.biases.append(vb)
-            self.weights.append(vw)
+                vw.append(np.array(w))
+            self.biases.append(np.array(vb))
+            self.weights.append(np.array(vw))
 
     def feedforward(self, a):
         """
@@ -68,11 +68,10 @@ class Network(object):
     @staticmethod
     def cost_derivative(output_activation, y):
         """
-
         根据方程 (1) 计算输出层的误差：
         :param output_activation: 网络的实际输出，是一个十维的向量，0-9 的激活值
         :param y: 预期输出：在这里是一个整数值：0-9
-        :return: 返回一个代表差异的向量，分别表示 0-9 的差异，正值表示比期望大，负值表示比期望小，
+        :return: 返回一个代表差异的向量，分别表示输出层各个节点的误差，正值表示比期望大，负值表示比期望小，
                  绝对值表示偏离期望的程度（修改的优先级）
 
         此处采用二次代价：
@@ -99,7 +98,7 @@ class Network(object):
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
         activation = x  # 当前层输入的激活向量
-        activations = [x]  # 保存压缩后的激活值 （x 为输入层的激活值）
+        activations = [np.array(x)]  # 保存压缩后的激活值 （x 为输入层的激活值）
         zs = []  # 保存每一层的输出（未压缩）
 
         # 这里模拟一个前向传播的过程，将每一层的输出（未压缩）保存在zs中，压缩后的激活值（作为下一层的输入）保存在activations
@@ -126,7 +125,7 @@ class Network(object):
         nabla_b[-1] = delta  # 根据方程(3) 误差向量即偏置的梯度
         # 根据方程 (4) 计算输出层权重梯度
         # reshape()是为了将向量转化为矩阵(只有二维向量支持矩阵运算)(单行或单列)，做矩阵乘法
-        nabla_w[-1] = np.dot(delta.reshape(10, 1), activations[-2].reshape(1, len(activations[-2])))
+        nabla_w[-1] = np.dot(delta.reshape(self.sizes[-1], 1), activations[-2].reshape(1, len(activations[-2])))
         # 输出层梯度计算完毕，这里从倒数第二层反向计算所有层梯度（不包含输入层）
         for l in range(2, self.num_layers):
             z = zs[-l]
@@ -198,21 +197,33 @@ class Network(object):
 
 if __name__ == "__main__":
     # 加载数据
+
     training_data = np.load('training_data.npy', allow_pickle=True)
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
     # 创建神经网络
-    net = Network([784, 90, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+    net = Network([784, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
+
+    net.load('net_data_3_3')
+
+    from my_data import my_data
+    import data_enhance
+
+    validation_data = my_data
+
+    validation_data = data_enhance.enhance(my_data, data_enhance.smooth)
 
     # 加载训练数据训练
-    net.SGD(training_data, 30, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+    # net.SGD(training_data, 10, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
 
+    # net.save('net_data_2_1')
     # 加载验证数据集对网络效果进行验证
     n_validation = len(validation_data)  # 获得验证数据集大小
     num = net.evaluate(validation_data)  # 获得评估正确样本数
     # 打印结果
     print("验证：{0}/{1} {2}%".format(num, n_validation, num / n_validation * 100))
-    net.save('net_data')
+
+    # net.save('net_data')
     # net.save('net_data')
     # 计算随机猜测的概率：10%左右
     # num = net.evaluate(test_data)
@@ -220,3 +231,4 @@ if __name__ == "__main__":
     # print("{0}/{1} {2}%".format(num, n_test, num / n_test * 100))
     # for x, y in test_data:
     #     print(np.argmax(net.feedforward(x)), y)
+
