@@ -13,7 +13,7 @@ def get_RGB(num: float):
     return c, c, c
 
 
-def datas_to_image(data: [], width=75, show_log=True):
+def datas_to_image(data: [], width=75, show_log=True, sort=True):
     """
     从数据集中生成一个PIL.Image 对象
     数据集中的数据项将会按照水平，从左至右依次排列，
@@ -23,9 +23,12 @@ def datas_to_image(data: [], width=75, show_log=True):
     :param data: 数据集
     :param width: 生成图片水平排列数据数量
     :param show_log: 是否显示进度
+    :param sort: 是否对数据集排序
     :return: PIL.Image 对象
     """
-    data.sort(key=lambda t: t[1])
+    if sort:
+        data = list(data)
+        data.sort(key=lambda t: t[1])
     if len(data) < width ** 2:
         width = int(np.ceil(np.sqrt(len(data))))
         height = width
