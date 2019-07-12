@@ -107,25 +107,30 @@ class Network(object):
             monitor_evaluation_accuracy=False,
             monitor_training_cost=False,
             monitor_training_accuracy=False,
+            show_log=True,
             stop_delay=-1):
         """
         训练逻辑与之前基本一样，但增加了L2规范化，故增加了参数 lmbda
         增加了网络性能监控的逻辑
-        :param training_data:
-        :param epochs:
-        :param mini_batch_size:
-        :param eta:
+        :param training_data:训练数据集
+        :param epochs:训练周期
+        :param mini_batch_size:随机小样本大小
+        :param eta:学习速度
         :param lmbda: 非负，规范化参数
-        :param evaluation_data:
-        :param monitor_evaluation_cost:
-        :param monitor_evaluation_accuracy:
-        :param monitor_training_cost:
-        :param monitor_training_accuracy:
+        :param evaluation_data:评估数据集
+        :param monitor_evaluation_cost:是否监测评估数据集代价性能，仅当提供评估数据集时有效
+        :param monitor_evaluation_accuracy:是否监测评估数据集正确度性能，仅当提供评估数据集时有效
+        :param monitor_training_cost:是否监测训练数据集代价性能
+        :param monitor_training_accuracy:是否监测训练数据集正确度性能
+        :param show_log:是否显示实时日志
         :param stop_delay: 当给出一个大于零的整数是，将会自动停止，延迟周期为该数值
-        :return:
+        :return:全部周期的监测数据，未监测的项返回空列表
         """
         if evaluation_data != None:
             n_data = len(evaluation_data)
+        else:
+            monitor_evaluation_cost = False
+            monitor_evaluation_accuracy = False
         n = len(training_data)
         evaluation_cost, evaluation_accuracy = [], []
         training_cost, training_accuracy = [], []
@@ -137,28 +142,32 @@ class Network(object):
                 for k in range(0, n, mini_batch_size)]
             for mini_batch in mini_batches:
                 self.update_mini_batch(mini_batch, eta, lmbda, len(training_data))
-            # ##########################下面是性能监控###################################
-            print("周期 {} 训练完成".format(j + 1))
+            # 性能监控
+            if show_log:
+                print("周期 {} 训练完成".format(j + 1))
             if monitor_training_cost:
                 cost = self.total_cost(training_data, lmbda)
                 training_cost.append(cost)
-                print("训练数据集的代价: {}".format(cost))
-
+                if show_log:
+                    print("训练数据集的代价: {}".format(cost))
             if monitor_training_accuracy:
                 accuracy = self.accuracy(training_data)
                 training_accuracy.append(accuracy)
-                print("数据集正确数: {} / {}".format(accuracy, n))
+                if show_log:
+                    print("训练数据集正确数: {} / {}".format(accuracy, n))
             if monitor_evaluation_cost:
                 cost = self.total_cost(evaluation_data, lmbda)
                 evaluation_cost.append(cost)
-                print("估算数据集的代价: {}".format(cost))
-
+                if show_log:
+                    print("估算数据集的代价: {}".format(cost))
             if monitor_evaluation_accuracy:
                 accuracy = self.accuracy(evaluation_data)
                 evaluation_accuracy.append(accuracy)
-                print("估算数据集的正确数: {} / {}".format(
-                    accuracy, n_data))
-            print("------------------------------------------")
+                if show_log:
+                    print("估算数据集的正确数: {} / {}".format(
+                        accuracy, n_data))
+            if show_log:
+                print("------------------------------------------")
             # 提前终止
             if stop_delay > 0 and monitor_evaluation_accuracy and monitor_evaluation_cost:
                 if len(evaluation_cost) >= stop_delay:
@@ -292,25 +301,19 @@ def sigmoid_prime(z):
 
 if __name__ == '__main__':
     # 加载数据
-    from my_data import my_data
-    from data_enhance import get_enhance_data
-
-    # my_data = get_enhance_data(my_data)
-
     training_data = np.load('training_data.npy', allow_pickle=True)
     test_data = np.load('test_data.npy', allow_pickle=True)
     validation_data = np.load('validation_data.npy', allow_pickle=True)
 
     net = Network([784, 30, 10])
-    net.load('net_data_3_3')
+    net.load('net_data_3_4')
 
-    training_data = my_data
     validation_data = validation_data[:500]
-    # validation_data = my_data[:500]
+
     print('加载网络完成')
-    epo = 40
+    epo = 4
     eta = 0.005
-    lmbda = 2
+    lmbda = 8
 
     # 加载训练数据训练
     # 取得监控数据
@@ -326,7 +329,7 @@ if __name__ == '__main__':
                 )
     # 监控数据可视化
 
-    net.save('net_data_3_4')
+    net.save('net_data_3_5')
 
     import matplotlib.pyplot as plt
 
