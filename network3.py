@@ -9,25 +9,30 @@ def sigmoid_prime(z):
     return sigmoid(z) * (1 - sigmoid(z))
 
 
-def RelU(z):
-    if z > 0:
-        return z
-    else:
-        return 0.0
+def tanh(z):
+    return 2 * sigmoid(2 * z) - 1
 
 
-def RelU_prime(z):
-    z = np.array(z).reshape(-1)
-    re = []
-    for i in z.flat:
-        if i < 0:
-            re.append(0.0)
-        else:
-            re.append(1.0)
-    if len(re) > 1:
-        return np.array(re)
-    else:
-        return re[0]
+def tanh_prime(z):
+    return 2 * sigmoid_prime(z)
+
+#
+# def ReLU(z):
+#     if z > 0:
+#         return z
+#     else:
+#         return 0
+#
+#
+# def ReLU_prime(z):
+#     z = np.array(z)
+#     _z = []
+#     for i in z.flat:
+#         if i > 0:
+#             _z.append(1.0)
+#         else:
+#             _z.append(0.0)
+#     return np.array(_z)
 
 
 # 输出层代价计算 && 输出层误差计算
@@ -126,7 +131,7 @@ class Layer(object):
         self.size = size
         self.sigmoid = activation_function
         self.sigmoid_prime = activation_derivative_function
-        self.weights = np.array([np.random.randn(input_size) for x in range(size)])
+        self.weights = np.array([np.random.randn(input_size)/np.sqrt(size) for x in range(size)])
         self.biases = np.random.randn(size)
         # 缓存计算结果
         self.input_data = None
@@ -185,6 +190,8 @@ class Layer(object):
         :param decay: 权重衰减系数
         :return: None
         """
+        if self.frozen:
+            return
         self.weights = np.array([[decay * w - nw for w, nw in zip(w, d_w)] for w, d_w in zip(self.weights, delta_w)])
         self.biases = np.array([b - d_b for b, d_b in zip(self.biases, delta_b)])
 
@@ -354,7 +361,7 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    net = Network([Layer(784, 30, sigmoid, sigmoid_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
+    net = Network([Layer(784, 30, tanh, tanh_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
     from my_data import my_data
 
-    net.SGD(my_data, 50, 10, 1, monitor_training_accuracy=True)
+    net.SGD(my_data, 20, 10, 1, monitor_training_accuracy=True)
