@@ -17,23 +17,24 @@ def tanh_prime(z):
     return 2 * sigmoid_prime(z)
 
 
-#
-# def ReLU(z):
-#     if z > 0:
-#         return z
-#     else:
-#         return 0
-#
-#
-# def ReLU_prime(z):
-#     z = np.array(z)
-#     _z = []
-#     for i in z.flat:
-#         if i > 0:
-#             _z.append(1.0)
-#         else:
-#             _z.append(0.0)
-#     return np.array(_z)
+# 可能需要更低的学习速率，由于导数较大（1）
+def ReLU(z):
+    if z > 0:
+        return z
+    else:
+        return 0
+
+
+def ReLU_prime(z):
+    z = np.array(z)
+    _z = []
+    for i in z.flat:
+        if i > 0:
+            _z.append(1.0)
+        else:
+            _z.append(0.0)
+    return np.array(_z)
+
 
 def max_pooling(input_data, size=2):
     """
@@ -454,7 +455,7 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    net = Network([Layer(784, 30, tanh, tanh_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
+    net = Network([Layer(784, 30, ReLU, ReLU_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
     from my_data import my_data
 
-    net.SGD(my_data, 20, 10, 1, monitor_training_accuracy=True)
+    net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
