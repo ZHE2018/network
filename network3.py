@@ -16,6 +16,7 @@ def tanh(z):
 def tanh_prime(z):
     return 2 * sigmoid_prime(z)
 
+
 #
 # def ReLU(z):
 #     if z > 0:
@@ -34,6 +35,41 @@ def tanh_prime(z):
 #             _z.append(0.0)
 #     return np.array(_z)
 
+def max_pooling(input_data, size=2):
+    """
+    输入是一个二维矩阵,最大值混合
+    :param input_data:
+    :param size:
+    :return:
+    """
+    if size <= 1:
+        return input_data
+    input_data = np.array(input_data)
+    x, y = input_data.shape
+    out = np.zeros((int(x / size), int(y / size)))
+    for i in range(int(x / size)):
+        for j in range(int(y / size)):
+            out[i, j] = np.max([input_data[i + w, j + h] for w in range(size) for h in range(size)])
+    return out
+
+
+def l2_pooling(input_data, size=2):
+    """
+    平方和的平方根混合
+    :param input_data:
+    :param size:
+    :return:
+    """
+    if size <= 1:
+        return input_data
+    input_data = np.array(input_data)
+    x, y = input_data.shape
+    out = np.zeros((int(x / size), int(y / size)))
+    for i in range(int(x / size)):
+        for j in range(int(y / size)):
+            out[i, j] = np.sqrt(np.sum([input_data[i + w, j + h] ** 2 for w in range(size) for h in range(size)]))
+    return out
+
 
 # 输出层代价计算 && 输出层误差计算
 # 二次代价函数
@@ -50,7 +86,7 @@ class QuadraticCost(object):
         """
         # 将y转化为向量
         _y = y
-        y = [0 for x in range(10)]
+        y = [0] * 10
         y[_y] = 1
         return 0.5 * np.sum([(ai - yi) ** 2 for ai, yi in zip(a, y)])
 
@@ -60,7 +96,7 @@ class QuadraticCost(object):
         根据反向传播基本方程(1) 给出输出层误差
         """
         _y = y
-        y = [0 for x in range(10)]
+        y = [0] * 10
         y[_y] = 1
         return (a - y) * sigmoid_prime(z)
 
@@ -79,7 +115,7 @@ class CrossEntropyCost(object):
         """
         # 预期值的向量化
         _y = y
-        y = [0 for x in range(10)]
+        y = [0] * 10
         y[_y] = 1
 
         _sum = 0.0
@@ -107,7 +143,7 @@ class CrossEntropyCost(object):
         """
         a = np.array(a)
         _y = y
-        y = [0 for x in range(10)]
+        y = [0] * 10
         y[_y] = 1
         y = np.array(y)
         return a - y
@@ -131,7 +167,7 @@ class Layer(object):
         self.size = size
         self.sigmoid = activation_function
         self.sigmoid_prime = activation_derivative_function
-        self.weights = np.array([np.random.randn(input_size)/np.sqrt(size) for x in range(size)])
+        self.weights = np.array([np.random.randn(input_size) / np.sqrt(size) for x in range(size)])
         self.biases = np.random.randn(size)
         # 缓存计算结果
         self.input_data = None
@@ -204,6 +240,63 @@ class Layer(object):
     def get_data(self):
         # TODO
         # 将层中数据包装为data并返回
+        pass
+
+
+class CNNLayer(object):
+    def __init__(self, core_size, core_num, activation_function, activation_derivative_function, same=False,
+                 pooling=max_pooling, pooling_size=2, frozen=False):
+        self.frozen = frozen
+        self.activation_function = activation_function
+        self.activation_derivative_function = activation_derivative_function
+        self.cores_w = []
+        self.cores_b = [np.random.rand() for x in range(core_num)]
+        self.core_size = core_size  # 一般为奇数
+        self.core_num = core_num
+        self.same = same
+        self.pooling = pooling
+        self.pooling_size = pooling_size
+        for core in range(core_num):
+            self.cores_w.append([[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)])
+
+    def feedforward(self, a, cazhe=False):
+        a = np.array(a)
+        if len(a.shape) == 2:
+            x, y = a.shape
+            a = [a]
+        else:
+            z, x, y = a.shape
+        outs = []
+        for core_w, core_b in zip(self.cores_w, self.cores_b):
+            out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
+            for input in a:
+                # 补全边缘，默认补0
+                if self.same:
+                    x, y = input.shape
+                    p = int((self.core_size - 1) / 2)
+                    temp = np.zeros((x + 2 * p, y + 2 * p))
+                    for w in range(x):
+                        for h in range(y):
+                            temp[w + p, h + p] = input[w][h]
+                    input = temp
+                    x, y = input.shape
+                    out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
+                for i in range(x - self.core_size + 1):
+                    for j in range(y - self.core_size + 1):
+                        out[i, j] += self.activation_function(
+                            core_b + np.sum([input[i + w][j + h] * core_w[w][h] for w in range(self.core_size) for h in
+                                             range(self.core_size)]))
+            out = self.pooling(out, self.pooling_size)  # 池化
+            outs.append(out)
+        return outs
+
+    def backprop(self, err):
+        pass
+
+    def update(self, delta_w, delta_b, decay=1):
+        pass
+
+    def front_layer_err(self, err, front_layer_z):
         pass
 
 
