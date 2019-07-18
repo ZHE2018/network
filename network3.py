@@ -1,6 +1,7 @@
 import numpy as np
 
 
+# z 参数是数值或array_like
 def sigmoid(z):
     return 1.0 / (1.0 + np.exp(-z))
 
@@ -19,6 +20,18 @@ def tanh_prime(z):
 
 # 可能需要更低的学习速率，由于导数较大（1）
 def ReLU(z):
+    z = np.array(z)
+    if z.size > 1:
+        shape = z.shape
+        _z = []
+        for i in list(z.flat):
+            if i > 0:
+                _z.append(i)
+            else:
+                _z.append(0)
+        _z = np.array(_z).reshape(shape)
+        return _z
+    z = list(z.flat)[0]
     if z > 0:
         return z
     else:
@@ -70,6 +83,19 @@ def l2_pooling(input_data, size=2):
         for j in range(int(y / size)):
             out[i, j] = np.sqrt(np.sum([input_data[i + w, j + h] ** 2 for w in range(size) for h in range(size)]))
     return out
+
+
+def convolution(a, b):
+    a = np.array(a)
+    b = np.array(b)
+    x_a, y_a = a.shape
+    x_b, y_b = b.shape
+    if x_a > x_b and y_a > y_b:
+        out = np.zeros((x_a - x_b + 1, y_a - y_b + 1))
+        for i in range(x_a - x_b + 1):
+            for j in range(y_a - y_b + 1):
+                out[i, j] += np.sum([a[i + w, j + h] * b[w, h] for w in range(x_b) for h in range(y_b)])
+        return out
 
 
 # 输出层代价计算 && 输出层误差计算
@@ -270,23 +296,18 @@ class CNNLayer(object):
         outs = []
         for core_w, core_b in zip(self.cores_w, self.cores_b):
             out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
-            for input in a:
+            for input_data in a:
                 # 补全边缘，默认补0
                 if self.same:
-                    x, y = input.shape
+                    x, y = input_data.shape
                     p = int((self.core_size - 1) / 2)
                     temp = np.zeros((x + 2 * p, y + 2 * p))
                     for w in range(x):
                         for h in range(y):
-                            temp[w + p, h + p] = input[w][h]
-                    input = temp
-                    x, y = input.shape
-                    out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
-                for i in range(x - self.core_size + 1):
-                    for j in range(y - self.core_size + 1):
-                        out[i, j] += self.activation_function(
-                            core_b + np.sum([input[i + w][j + h] * core_w[w][h] for w in range(self.core_size) for h in
-                                             range(self.core_size)]))
+                            temp[w + p, h + p] = input_data[w][h]
+                    input_data = temp
+                out = convolution(input_data, core_w) + np.float(core_b)
+                out = self.activation_function(out)
             out = self.pooling(out, self.pooling_size)  # 池化
             outs.append(out)
         return outs
@@ -455,7 +476,12 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    net = Network([Layer(784, 30, ReLU, ReLU_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
-    from my_data import my_data
+    # net = Network([Layer(784, 30, ReLU, ReLU_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
+    # from my_data import my_data
+    #
+    # net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
 
-    net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
+    cnn = CNNLayer(5, 3, ReLU, tanh_prime)
+    test_data = np.random.randn(28, 28)
+    test_data = cnn.feedforward(test_data)
+    print(test_data)
