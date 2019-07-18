@@ -40,54 +40,86 @@ def ReLU(z):
 
 def ReLU_prime(z):
     z = np.array(z)
-    _z = []
-    for i in z.flat:
-        if i > 0:
-            _z.append(1.0)
-        else:
-            _z.append(0.0)
-    return np.array(_z)
+    if z.size > 1:
+        shape = z.shape
+        _z = []
+        for i in list(z.flat):
+            if i > 0:
+                _z.append(1)
+            else:
+                _z.append(0)
+        _z = np.array(_z).reshape(shape)
+        return _z
+    z = list(z.flat)[0]
+    if z > 0:
+        return 1.0
+    else:
+        return 0
 
 
-def max_pooling(input_data, size=2):
-    """
-    输入是一个二维矩阵,最大值混合
-    :param input_data:
-    :param size:
-    :return:
-    """
-    if size <= 1:
-        return input_data
-    input_data = np.array(input_data)
-    x, y = input_data.shape
-    out = np.zeros((int(x / size), int(y / size)))
-    for i in range(int(x / size)):
-        for j in range(int(y / size)):
-            out[i, j] = np.max([input_data[i + w, j + h] for w in range(size) for h in range(size)])
-    return out
+class max_pooling(object):
+
+    @staticmethod
+    def pooling(input_data, size=2):
+        """
+        输入是一个二维矩阵,最大值混合
+        :param input_data:
+        :param size:
+        :return:
+        """
+        if size <= 1:
+            return input_data
+        input_data = np.array(input_data)
+        x, y = input_data.shape
+        out = np.zeros((int(x / size), int(y / size)))
+        for i in range(int(x / size)):
+            for j in range(int(y / size)):
+                out[i, j] = np.max([input_data[i + w, j + h] for w in range(size) for h in range(size)])
+        return out
+
+    @staticmethod
+    def upsample(input_data, size=2):
+        input_data = np.array(input_data)
+        w, h = input_data.shape
+        cnnl = np.zeros((w * size, h * size))
+        for i in range(w):
+            for j in range(h):
+                cnnl[i * size, j * size] = input_data[i, j]
+        return cnnl
 
 
-def l2_pooling(input_data, size=2):
-    """
-    平方和的平方根混合
-    :param input_data:
-    :param size:
-    :return:
-    """
-    if size <= 1:
-        return input_data
-    input_data = np.array(input_data)
-    x, y = input_data.shape
-    out = np.zeros((int(x / size), int(y / size)))
-    for i in range(int(x / size)):
-        for j in range(int(y / size)):
-            out[i, j] = np.sqrt(np.sum([input_data[i + w, j + h] ** 2 for w in range(size) for h in range(size)]))
-    return out
+class L2_pooling(object):
+    @staticmethod
+    def pooling(input_data, size=2):
+        """
+        平方和的平方根混合
+        :param input_data:
+        :param size:
+        :return:
+        """
+        if size <= 1:
+            return input_data
+        input_data = np.array(input_data)
+        x, y = input_data.shape
+        out = np.zeros((int(x / size), int(y / size)))
+        for i in range(int(x / size)):
+            for j in range(int(y / size)):
+                out[i, j] = np.sqrt(np.sum([input_data[i + w, j + h] ** 2 for w in range(size) for h in range(size)]))
+        return out
 
 
-def convolution(a, b):
+def convolution(a, b, same=False):
     a = np.array(a)
     b = np.array(b)
+    if same:
+        x, y = a.shape
+        x_b, y_b = b.shape
+        p = int((x_b - 1) / 2)
+        temp = np.zeros((x + 2 * p, y + 2 * p))
+        for w in range(x):
+            for h in range(y):
+                temp[w + p, h + p] = a[w][h]
+        a = temp
     x_a, y_a = a.shape
     x_b, y_b = b.shape
     if x_a > x_b and y_a > y_b:
@@ -274,8 +306,8 @@ class CNNLayer(object):
     def __init__(self, core_size, core_num, activation_function, activation_derivative_function, same=False,
                  pooling=max_pooling, pooling_size=2, frozen=False):
         self.frozen = frozen
-        self.activation_function = activation_function
-        self.activation_derivative_function = activation_derivative_function
+        self.sigmoid = activation_function
+        self.sigmoid_prime = activation_derivative_function
         self.cores_w = []
         self.cores_b = [np.random.rand() for x in range(core_num)]
         self.core_size = core_size  # 一般为奇数
@@ -285,14 +317,32 @@ class CNNLayer(object):
         self.pooling_size = pooling_size
         for core in range(core_num):
             self.cores_w.append([[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)])
+        self.input_data = None
+        self.z = None
+        self.a = None
 
-    def feedforward(self, a, cazhe=False):
+    @staticmethod
+    def rot180(input_data):
+        input_data = np.array(input_data)
+        if len(input_data.shape) == 2:
+            out = np.zeros(input_data.shape)
+            w, h = input_data.shape
+            for i in range(w):
+                for j in range(h):
+                    out[-i - 1, -j - 1] = input_data[i, j]
+            return out
+
+    def feedforward(self, a, cache=False):
         a = np.array(a)
         if len(a.shape) == 2:
             x, y = a.shape
             a = [a]
         else:
             z, x, y = a.shape
+        if cache:
+            self.input_data = a
+            self.a = []
+            self.z = []
         outs = []
         for core_w, core_b in zip(self.cores_w, self.cores_b):
             out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
@@ -306,20 +356,72 @@ class CNNLayer(object):
                         for h in range(y):
                             temp[w + p, h + p] = input_data[w][h]
                     input_data = temp
-                out = convolution(input_data, core_w) + np.float(core_b)
-                out = self.activation_function(out)
-            out = self.pooling(out, self.pooling_size)  # 池化
+                out += convolution(input_data, core_w) + np.float(core_b)
+            if cache:
+                self.z.append(out)
+            out = self.sigmoid(out)
+            if cache:
+                self.a.append(out)
+            out = self.pooling.pooling(out, self.pooling_size)  # 池化
             outs.append(out)
         return outs
 
     def backprop(self, err):
-        pass
+        err = np.array(err)
+        err = err.reshape((self.core_num, int(np.sqrt(err.size / self.core_num)), -1))
+        # 池化层反向传播误差
+        cnnls = []
+        for e in err:
+            cnnls.append(self.pooling.upsample(e, self.pooling_size))
+        cnn_b = [np.sum(cnnl) for cnnl in cnnls]
+        cnn_w = []
+        for i in range(self.core_num):
+            w = np.zeros((self.core_size, self.core_size))
+            for input_data in self.input_data:
+                w += convolution(input_data, cnnls[i])
+                w = self.rot180(w)
+            cnn_w.append(w)
+        return cnn_w, cnn_b
 
     def update(self, delta_w, delta_b, decay=1):
-        pass
+        if self.frozen:
+            return
+        self.cores_b = [b - db for b, db in zip(self.cores_b, delta_b)]
+        self.cores_w = [[[w * decay - dw for w, dw in zip(lw, ldw)] for lw, ldw in zip(wi, dwi)] for wi, dwi in
+                        zip(self.cores_w, delta_w)]
 
     def front_layer_err(self, err, front_layer_z):
-        pass
+        err = np.array(err)
+        err = err.reshape((self.core_num, int(np.sqrt(err.size / self.core_num)), -1))
+        # 池化层反向传播误差
+        cnnls = []
+        outs = []
+        for e in err:
+            cnnls.append(self.pooling.upsample(e, self.pooling_size))
+        front_layer_z = np.array(front_layer_z)
+        if len(front_layer_z.shape) == 2:
+            front_layer_z = [front_layer_z]
+        for z in front_layer_z:
+            z = np.array(z)
+            z = self.sigmoid_prime(z)
+            out = np.zeros(z.shape)
+            for i in range(self.core_num):
+                if self.same:
+                    out += convolution(cnnls[i], self.rot180(self.cores_w[i]), same=True) * z
+                else:
+                    """
+                    此处由于same==False，前向传播途中输出比输入小，故反向传来的误差也比输入小
+                    这里将误差调整至与输入一致
+                    """
+                    p = int((self.core_size - 1) / 2)
+                    temp = np.zeros(z.shape)
+                    w, h = cnnls[i].shape
+                    for px in range(w):
+                        for py in range(h):
+                            temp[px + p, py + p] = cnnls[i][px][py]
+                    out += convolution(temp, self.rot180(self.cores_w[i]), same=True) * z
+            outs.append(out)
+        return outs
 
 
 class Network(object):
@@ -476,12 +578,16 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    # net = Network([Layer(784, 30, ReLU, ReLU_prime), Layer(30, 10, sigmoid, sigmoid_prime)])
-    # from my_data import my_data
-    #
-    # net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
+    net = Network(
+        [CNNLayer(5, 3, ReLU, ReLU_prime), CNNLayer(5, 3, ReLU, ReLU_prime), Layer(48, 10, sigmoid, sigmoid_prime)])
+    from my_data import my_data
 
-    cnn = CNNLayer(5, 3, ReLU, tanh_prime)
-    test_data = np.random.randn(28, 28)
-    test_data = cnn.feedforward(test_data)
-    print(test_data)
+    my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
+    # print(my_data)
+    net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
+
+    # cnn = CNNLayer(5, 3, ReLU, tanh_prime)
+    # cnn.feedforward(np.random.randn(28, 28), cache=True)
+    # test_data = np.random.randn(12 * 12 * 3)
+    # d = cnn.front_layer_err(test_data, np.random.randn(28, 28))
+    # print(dw, db)
