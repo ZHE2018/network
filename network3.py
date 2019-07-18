@@ -3,6 +3,12 @@ import numpy as np
 
 # z 参数是数值或array_like
 def sigmoid(z):
+    z = np.array(z)
+    if len(z.shape) > 1:
+        shape = z.shape
+        z = np.array(list(z.flat))
+        z = 1.0 / (1.0 + np.exp(-z))
+        return np.array(z).reshape(shape)
     return 1.0 / (1.0 + np.exp(-z))
 
 
@@ -60,11 +66,12 @@ def ReLU_prime(z):
 class max_pooling(object):
 
     @staticmethod
-    def pooling(input_data, size=2):
+    def pooling(input_data, size=2, point=None):
         """
         输入是一个二维矩阵,最大值混合
         :param input_data:
         :param size:
+        :param point:
         :return:
         """
         if size <= 1:
@@ -72,16 +79,31 @@ class max_pooling(object):
         input_data = np.array(input_data)
         x, y = input_data.shape
         out = np.zeros((int(x / size), int(y / size)))
+        if point is None:
+            point = {}
         for i in range(int(x / size)):
             for j in range(int(y / size)):
-                out[i, j] = np.max([input_data[i + w, j + h] for w in range(size) for h in range(size)])
+                max_value = input_data[i * size, j * size]
+                pos = (i * size, j * size)
+                for _x in range(size):
+                    for _y in range(size):
+                        if input_data[i * size + _x, j * size + _y] > max_value:
+                            max_value = input_data[i * size + _x, j * size + _y]
+                            pos = (i * size + _x, j * size + _y)
+                out[i, j] = max_value
+                point[(i, j)] = pos
         return out
 
     @staticmethod
-    def upsample(input_data, size=2):
+    def upsample(input_data, size=2, point=None):
         input_data = np.array(input_data)
         w, h = input_data.shape
         cnnl = np.zeros((w * size, h * size))
+        if point is not None:
+            for i in range(w):
+                for j in range(h):
+                    cnnl[point[(i, j)]] = input_data[i, j]
+            return cnnl
         for i in range(w):
             for j in range(h):
                 cnnl[i * size, j * size] = input_data[i, j]
@@ -315,6 +337,7 @@ class CNNLayer(object):
         self.same = same
         self.pooling = pooling
         self.pooling_size = pooling_size
+        self.pooling_data = None
         for core in range(core_num):
             self.cores_w.append([[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)])
         self.input_data = None
@@ -358,11 +381,12 @@ class CNNLayer(object):
                     input_data = temp
                 out += convolution(input_data, core_w) + np.float(core_b)
             if cache:
-                self.z.append(out)
+                self.z.append(self.pooling.pooling(out, self.pooling_size))
             out = self.sigmoid(out)
             if cache:
-                self.a.append(out)
-            out = self.pooling.pooling(out, self.pooling_size)  # 池化
+                self.a.append(self.pooling.pooling(out, self.pooling_size))
+                self.pooling_data = {}
+            out = self.pooling.pooling(out, self.pooling_size, point=self.pooling_data)  # 池化
             outs.append(out)
         return outs
 
@@ -372,16 +396,16 @@ class CNNLayer(object):
         # 池化层反向传播误差
         cnnls = []
         for e in err:
-            cnnls.append(self.pooling.upsample(e, self.pooling_size))
+            cnnls.append(self.pooling.upsample(e, self.pooling_size, self.pooling_data))
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
             w = np.zeros((self.core_size, self.core_size))
             for input_data in self.input_data:
                 w += convolution(input_data, cnnls[i])
-                w = self.rot180(w)
+            w = self.rot180(w)
             cnn_w.append(w)
-        return cnn_w, cnn_b
+        return np.array(cnn_w), np.array(cnn_b)
 
     def update(self, delta_w, delta_b, decay=1):
         if self.frozen:
@@ -584,7 +608,7 @@ if __name__ == "__main__":
 
     my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
     # print(my_data)
-    net.SGD(my_data, 50, 20, 0.1, monitor_training_accuracy=True)
+    net.SGD(my_data, 50, 10, 1, monitor_training_accuracy=True, monitor_training_cost=True)
 
     # cnn = CNNLayer(5, 3, ReLU, tanh_prime)
     # cnn.feedforward(np.random.randn(28, 28), cache=True)
