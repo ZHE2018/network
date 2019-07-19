@@ -1,5 +1,10 @@
 import numpy as np
 
+"""
+Note:所有激活函数同时接受数值，或多维数组
+     所有数组都是 C-style
+"""
+
 
 def print2D_data(data, msg=''):
     for i in data:
@@ -138,9 +143,11 @@ class L2_pooling(object):
         return out
 
 
-def convolution(a, b, same=False):
+def convolution_2D(a, b, same=False):
     a = np.array(a)
     b = np.array(b)
+    if a.shape[0] < b.shape[0] and a.shape[1] < b.shape[1]:
+        a, b = b, a
     if same:
         x, y = a.shape
         x_b, y_b = b.shape
@@ -158,6 +165,33 @@ def convolution(a, b, same=False):
             for j in range(y_a - y_b + 1):
                 out[i, j] += np.sum([a[i + w, j + h] * b[w, h] for w in range(x_b) for h in range(y_b)])
         return out
+
+
+def convolution(a, b, same=False):
+    a = np.array(a)
+    b = np.array(b)
+    if len(a.shape) == 2 and len(b.shape) == 2:
+        return convolution_2D(a, b, same=same)
+    elif len(a.shape) == 3 and len(b.shape) == 3 and a.shape[0] == b.shape[0]:
+        z, x_a, y_a = a.shape
+        z, x_b, y_b = b.shape
+        if same:
+            x, y = x_a, y_a
+        else:
+            x, y = x_a - x_b + 1, y_a - y_b + 1
+        out = np.zeros((x, y))
+        for ai, bi in zip(a, b):
+            out += convolution_2D(ai, bi, same=same)
+        return np.array(out)
+    else:
+        if len(a.shape) != len(b.shape):
+            raise TypeError('卷积类型不匹配 {} != {}'.format(a.shape, b.shape))
+        elif len(a.shape) > 3:
+            raise TypeError('参数维度过多：维度必须为 2 或 3，当前为{}'.format(len(a.shape)))
+        elif len(a.shape) < 2:
+            raise TypeError('参数维度过少：维度必须为 2 或 3，当前为{}'.format(len(a.shape)))
+        else:
+            raise TypeError('卷积核厚度必须与输入保持一致 输入：{} 卷积核{}'.format(a.shape[0], b.shape[0]))
 
 
 # 输出层代价计算 && 输出层误差计算
@@ -333,21 +367,29 @@ class Layer(object):
 
 
 class CNNLayer(object):
-    def __init__(self, core_size, core_num, activation_function, activation_derivative_function, same=False,
-                 pooling=max_pooling, pooling_size=2, frozen=False):
+    def __init__(self, core_size, core_num, activation_function, activation_derivative_function, core_thickness=1,
+                 same=False, pooling=max_pooling, pooling_size=2, frozen=False):
         self.frozen = frozen
         self.sigmoid = activation_function
         self.sigmoid_prime = activation_derivative_function
         self.cores_w = []
         self.cores_b = [np.random.rand() for x in range(core_num)]
         self.core_size = core_size  # 一般为奇数
+        self.core_thickness = core_thickness
         self.core_num = core_num
         self.same = same
         self.pooling = pooling
         self.pooling_size = pooling_size
         self.pooling_data = None
-        for core in range(core_num):
-            self.cores_w.append([[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)])
+        if core_thickness > 1:
+            for core in range(core_num):
+                self.cores_w.append(
+                    [[[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)] for t in
+                     range(core_thickness)])
+        else:
+            for core in range(core_num):
+                self.cores_w.append(
+                    [[np.random.randn() / core_size for y in range(core_size)] for x in range(core_size)])
         self.input_data = None
         self.z = None
         self.a = None
@@ -361,15 +403,17 @@ class CNNLayer(object):
             for i in range(w):
                 for j in range(h):
                     out[-i - 1, -j - 1] = input_data[i, j]
-            return out
+            return np.array(out)
 
     def feedforward(self, a, cache=False):
         a = np.array(a)
         if len(a.shape) == 2:
             x, y = a.shape
-            a = [a]
         else:
             z, x, y = a.shape
+            # 纠正 输入数据的维度
+            if z == 1:
+                a = a[0]
         if cache:
             self.input_data = a
             self.a = []
@@ -377,18 +421,7 @@ class CNNLayer(object):
             self.pooling_data = []
         outs = []
         for core_w, core_b in zip(self.cores_w, self.cores_b):
-            out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
-            for input_data in a:
-                # 补全边缘，默认补0
-                if self.same:
-                    x, y = input_data.shape
-                    p = int((self.core_size - 1) / 2)
-                    temp = np.zeros((x + 2 * p, y + 2 * p))
-                    for w in range(x):
-                        for h in range(y):
-                            temp[w + p, h + p] = input_data[w][h]
-                    input_data = temp
-                out += convolution(input_data, core_w) + np.float(core_b)
+            out = convolution(a, core_w, self.same) + np.float(core_b)
             if cache:
                 self.z.append(self.pooling.pooling(out, self.pooling_size))
             out = self.sigmoid(out)
@@ -411,10 +444,7 @@ class CNNLayer(object):
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
-            w = np.zeros((self.core_size, self.core_size))
-            for input_data in self.input_data:
-                w += convolution(self.rot180(input_data), cnnls[i])
-            # w = self.rot180(w)
+            w = convolution(self.rot180(self.input_data), cnnls[i])
             cnn_w.append(w)
         return np.array(cnn_w), np.array(cnn_b)
 
