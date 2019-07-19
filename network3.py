@@ -444,7 +444,8 @@ class CNNLayer(object):
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
-            w = convolution(self.rot180(self.input_data), cnnls[i])
+            w = convolution(self.input_data, cnnls[i])
+            w = self.rot180(w)
             cnn_w.append(w)
         return np.array(cnn_w), np.array(cnn_b)
 
@@ -643,16 +644,43 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    net = Network(
-        [CNNLayer(5, 3, ReLU, ReLU_prime), CNNLayer(5, 3, ReLU, ReLU_prime), Layer(48, 10, sigmoid, sigmoid_prime)])
+    ############### 测试 max_pooling ########################
+    # test_data = [[int(np.random.rand() * 10) for y in range(8)] for x in range(8)]
+    # for i in test_data:
+    #     for j in i:
+    #         print(int(j), end=' ')
+    #     print()
+    # point = {}
+    # test_data = max_pooling.pooling(test_data, point=point)
+    # for i in test_data:
+    #     for j in i:
+    #         print(int(j), end=' ')
+    #     print()
+    # test_data = max_pooling.upsample(test_data, point=point)
+    # for i in test_data:
+    #     for j in i:
+    #         print(int(j), end=' ')
+    #     print()
+    ################################################################
+    #################测试CNNLayer#################################
+
+    net = Network([CNNLayer(5, 3, ReLU, ReLU_prime), Layer(432, 10, sigmoid, sigmoid_prime)])
     from my_data import my_data
 
     my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
     # print(my_data)
-    net.SGD(my_data, 50, 10, 1, monitor_training_accuracy=True, monitor_training_cost=True)
+    net.SGD(my_data, 50, 10, 0.05, monitor_training_accuracy=True, monitor_training_cost=True)
 
-    # cnn = CNNLayer(5, 3, ReLU, tanh_prime)
-    # cnn.feedforward(np.random.randn(28, 28), cache=True)
-    # test_data = np.random.randn(12 * 12 * 3)
-    # d = cnn.front_layer_err(test_data, np.random.randn(28, 28))
-    # print(dw, db)
+    ##############################################################
+    # cnn = CNNLayer(5, 1, tanh, tanh_prime, core_thickness=3, same=True)
+    # data_in = np.random.randn(3, 28, 28)
+    # out = cnn.feedforward(data_in, cache=True)
+    # print(np.array(out).shape)
+
+    # err = np.random.randn(144)
+    # dw, db = cnn.backprop(err)
+    # print(list(np.array(dw).flat))
+    # print(np.average(np.array(err).flat))
+    # print(np.average(np.array(dw).flat))
+    # print(list(np.array(db).flat))
+    # cnn.update(dw, db)
