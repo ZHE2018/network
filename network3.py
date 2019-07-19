@@ -1,6 +1,14 @@
 import numpy as np
 
 
+def print2D_data(data, msg=''):
+    for i in data:
+        for j in i:
+            print(int(j), end=' ')
+        print()
+    print('-----------------{}------------------------'.format(msg))
+
+
 # z 参数是数值或array_like
 def sigmoid(z):
     z = np.array(z)
@@ -366,6 +374,7 @@ class CNNLayer(object):
             self.input_data = a
             self.a = []
             self.z = []
+            self.pooling_data = []
         outs = []
         for core_w, core_b in zip(self.cores_w, self.cores_b):
             out = np.zeros((x - self.core_size + 1, y - self.core_size + 1))
@@ -383,10 +392,12 @@ class CNNLayer(object):
             if cache:
                 self.z.append(self.pooling.pooling(out, self.pooling_size))
             out = self.sigmoid(out)
+            pooling_data = {}
             if cache:
                 self.a.append(self.pooling.pooling(out, self.pooling_size))
-                self.pooling_data = {}
-            out = self.pooling.pooling(out, self.pooling_size, point=self.pooling_data)  # 池化
+            out = self.pooling.pooling(out, self.pooling_size, point=pooling_data)  # 池化
+            if cache:
+                self.pooling_data.append(pooling_data)
             outs.append(out)
         return outs
 
@@ -395,15 +406,15 @@ class CNNLayer(object):
         err = err.reshape((self.core_num, int(np.sqrt(err.size / self.core_num)), -1))
         # 池化层反向传播误差
         cnnls = []
-        for e in err:
-            cnnls.append(self.pooling.upsample(e, self.pooling_size, self.pooling_data))
+        for i in range(len(err)):
+            cnnls.append(self.pooling.upsample(err[i], self.pooling_size, self.pooling_data[i]))
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
             w = np.zeros((self.core_size, self.core_size))
             for input_data in self.input_data:
-                w += convolution(input_data, cnnls[i])
-            w = self.rot180(w)
+                w += convolution(self.rot180(input_data), cnnls[i])
+            # w = self.rot180(w)
             cnn_w.append(w)
         return np.array(cnn_w), np.array(cnn_b)
 
