@@ -58,7 +58,7 @@ def ReLU_prime(z):
     if z > 0:
         return 1.0
     else:
-        return 0
+        return 0.0
 
 
 # 池化层
@@ -442,10 +442,11 @@ class CNNLayer(object):
         err = np.array(err)
         err = err.reshape((self.core_num, int(np.sqrt(err.size / self.core_num)), -1))
         # 池化层反向传播误差
-        cnnls = []
+        cnnls = []  # 获得卷积层的误差
         for i in range(len(err)):
             d_a = self.pooling.upsample(err[i], self.pooling_size, self.pooling_data[i])
             cnnls.append(np.array(d_a) * self.sigmoid_prime(self.convolution_z[i]))
+        # 计算卷积层梯度
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
@@ -603,31 +604,45 @@ class Network(object):
         :param n:训练数据总数， 规范化改变了权重更新规则，需要该参数
         :return: None
         """
+        # 保存各个层的 w,b 的梯度平均值
         nabla_b = []
         nabla_w = []
         for x, y in mini_batch:
+            # 进行一次前向传播，纪录中间数据
             self.feedforward(x, cache=True)
+            # 保存单个样本各个层梯度
             d_b, d_w = [], []
+            # 计算输出层误差
             delta = self.cost.delta(self.layers[-1].z, self.layers[-1].a, y)
+            # 反向传播输出层误差，计算各层 w,b 的梯度
             for i in [x for x in range(len(self.layers))][::-1]:
+                # 得到误差的层
                 layer = self.layers[i]
+                # 利用该层误差计算梯度
                 w, b = layer.backprop(delta)
+                # 取均值
                 w = w * eta / len(mini_batch)
                 b = b * eta / len(mini_batch)
-                if i > 0:
+
+                if i > 0:  # 若存在前一层（非输入层），则将误差向前传播，计算前一层误差
                     front_layer = self.layers[i - 1]
                     delta = layer.front_layer_err(delta, front_layer.sigmoid_prime(front_layer.z))
+                # 保存该层梯度
                 d_b.append(b)
                 d_w.append(w)
-            if len(nabla_b) < len(self.layers):
+            if len(nabla_b) < len(self.layers):  # 如果是第一个样本
+                # 初始化平均梯度
                 nabla_b = d_b
                 nabla_w = d_w
-            else:
+            else:  # 如果是后续样本
                 for i in range(len(self.layers)):
                     nabla_b[i] = nabla_b[i] + d_b[i]
                     nabla_w[i] = nabla_w[i] + d_w[i]
+        # 计算权重衰减
         decay = 1 - eta * lmbda / n
+        # 依次更新各层参数
         for i in range(len(self.layers)):
+            # 保存的梯度是由最后一层向前依次保存
             self.layers[i].update(nabla_w[-(i + 1)], nabla_b[-(i + 1)], decay)
 
     def total_cost(self, data, lmbda):
@@ -656,14 +671,13 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    #################测试CNNLayer#################################
+    # ################ 测试 Network #################################
 
-    # net = Network([CNNLayer(5, 1, ReLU, ReLU_prime), Layer(144, 10, sigmoid, sigmoid_prime)])
-    # from my_data import my_data
-    #
-    # my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
-    # # print(my_data)
-    # net.SGD(my_data, 50, 10, 0.1, monitor_training_accuracy=True, monitor_training_cost=True)
+    net = Network([CNNLayer(5, 1, tanh, tanh_prime), Layer(144, 10, sigmoid, sigmoid_prime)])
+    from my_data import my_data
+
+    my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
+    net.SGD(my_data, 50, 10, 0.05, monitor_training_accuracy=True, monitor_training_cost=True)
 
     ##############################################################
     # cnn = CNNLayer(5, 1, tanh, tanh_prime, pooling_size=1)
@@ -692,45 +706,36 @@ if __name__ == "__main__":
     # print('end')
 
     #  ###############  单元测试：测试单个层的 feedforward && backprop 单层网络性能 ####################
-
-    # data_in = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])
-    # test_layer = CNNLayer(2, 1, ReLU, tanh_prime, pooling_size=1)
-    # test_layer.cores_b = [0]
-    # test_layer.cores_w[0] = [[1, 2], [3, 4]]
-    # ou = test_layer.feedforward(data_in, cache=True)
-    # ou = test_layer.backprop(ou)
-    # print(ou)
-
-    import matplotlib.pyplot as plt
-
-    # 生成输入数据作为唯一样本
-    data_in = np.random.randn(3, 7, 7)
-    # 学习速率
-    eta = 0.05
-    # 收集没个学习周期（在线学习）的输出误差
-    plt_data = []
-    cost = []
-    # 期望输出向量，期望向量每个值相同
-    expect_value = 0.5
-    # 配置测试的层
-    test_layer = CNNLayer(2, 1, tanh, tanh_prime, pooling_size=2, core_thickness=3)
-
-    out = test_layer.feedforward(data_in)
-    for i in range(np.array(out).size):
-        plt_data.append([])
-    for ep in range(500):
-        out = test_layer.feedforward(data_in, cache=True)
-        out = np.array(out)
-        _sum = 0
-        for i, j in zip(list(out.flat), range(out.size)):
-            plt_data[j].append(i)
-            _sum += (i - expect_value) ** 2
-        cost.append(_sum)
-        _w, b = test_layer.backprop(out - expect_value)
-        test_layer.update(_w * eta, b * eta)
-    print(test_layer.feedforward(data_in))
-    for d in plt_data:
-        plt.plot(d)
-    plt.plot([0, 500], [0, 0], color='black')
-    plt.plot(cost)
-    plt.show()
+    # import matplotlib.pyplot as plt
+    #
+    # # 生成输入数据作为唯一样本
+    # data_in = np.random.randn(3, 7, 7)
+    # # 学习速率
+    # eta = 0.05
+    # # 收集没个学习周期（在线学习）的输出误差
+    # plt_data = []
+    # cost = []
+    # # 期望输出向量，期望向量每个值相同
+    # expect_value = 0.5
+    # # 配置测试的层
+    # test_layer = CNNLayer(2, 1, tanh, tanh_prime, pooling_size=2, core_thickness=3)
+    #
+    # out = test_layer.feedforward(data_in)
+    # for i in range(np.array(out).size):
+    #     plt_data.append([])
+    # for ep in range(500):
+    #     out = test_layer.feedforward(data_in, cache=True)
+    #     out = np.array(out)
+    #     _sum = 0
+    #     for i, j in zip(list(out.flat), range(out.size)):
+    #         plt_data[j].append(i)
+    #         _sum += (i - expect_value) ** 2
+    #     cost.append(_sum)
+    #     _w, b = test_layer.backprop(out - expect_value)
+    #     test_layer.update(_w * eta, b * eta)
+    # print(test_layer.feedforward(data_in))
+    # for d in plt_data:
+    #     plt.plot(d)
+    # plt.plot([0, 500], [0, 0], color='black')
+    # plt.plot(cost)
+    # plt.show()
