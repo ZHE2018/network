@@ -6,79 +6,70 @@ Note:所有激活函数同时接受数值，或多维数组
 """
 
 
-def print2D_data(data, msg=''):
-    for i in data:
-        for j in i:
-            print(int(j), end=' ')
-        print()
-    print('-----------------{}------------------------'.format(msg))
+# 装饰器，装饰单参数函数，使其支持 array_like 输入
+def array_like(fun):
+    def wrapper(z):
+        z = np.array(z)
+        if z.size <= 1:
+            return fun(z)
+        shape = z.shape
+        z = list(z.flat)
+        out = []
+        for i in z:
+            out.append(fun(i))
+        out = np.array(out).reshape(shape)
+        return out
+
+    return wrapper
 
 
 # z 参数是数值或array_like
+@array_like
 def sigmoid(z):
-    z = np.array(z)
-    if len(z.shape) > 1:
-        shape = z.shape
-        z = np.array(list(z.flat))
-        z = 1.0 / (1.0 + np.exp(-z))
-        return np.array(z).reshape(shape)
     return 1.0 / (1.0 + np.exp(-z))
 
 
+@array_like
 def sigmoid_prime(z):
     return sigmoid(z) * (1 - sigmoid(z))
 
 
+@array_like
 def tanh(z):
     return 2 * sigmoid(2 * z) - 1
 
 
+@array_like
 def tanh_prime(z):
     return 2 * sigmoid_prime(z)
 
 
 # 可能需要更低的学习速率，由于导数较大（1）
+@array_like
 def ReLU(z):
-    z = np.array(z)
-    if z.size > 1:
-        shape = z.shape
-        _z = []
-        for i in list(z.flat):
-            if i > 0:
-                _z.append(i)
-            else:
-                _z.append(0)
-        _z = np.array(_z).reshape(shape)
-        return _z
-    z = list(z.flat)[0]
     if z > 0:
         return z
     else:
         return 0
 
 
+@array_like
 def ReLU_prime(z):
-    z = np.array(z)
-    if z.size > 1:
-        shape = z.shape
-        _z = []
-        for i in list(z.flat):
-            if i > 0:
-                _z.append(1)
-            else:
-                _z.append(0)
-        _z = np.array(_z).reshape(shape)
-        return _z
-    z = list(z.flat)[0]
     if z > 0:
         return 1.0
     else:
         return 0
 
 
+# 池化层
 class max_pooling(object):
+    """
+    池化层没有参数，故无需调整，
+    没有激活函数，故令激活函数为自身，导数为1
+    """
 
     @staticmethod
+    # 池化层前向传播
     def pooling(input_data, size=2, point=None):
         """
         输入是一个二维矩阵,最大值混合
@@ -108,7 +99,10 @@ class max_pooling(object):
         return out
 
     @staticmethod
+    # 池化层的反向传播
     def upsample(input_data, size=2, point=None):
+        if size <= 1:
+            return input_data
         input_data = np.array(input_data)
         w, h = input_data.shape
         cnnl = np.zeros((w * size, h * size))
@@ -393,6 +387,8 @@ class CNNLayer(object):
         self.input_data = None
         self.z = None
         self.a = None
+        self.convolution_z = None
+        self.convolution_a = None
 
     @staticmethod
     def rot180(input_data):
@@ -418,19 +414,27 @@ class CNNLayer(object):
             self.input_data = a
             self.a = []
             self.z = []
+            self.convolution_z = []
+            self.convolution_a = []
             self.pooling_data = []
         outs = []
         for core_w, core_b in zip(self.cores_w, self.cores_b):
+            # 卷积
             out = convolution(a, core_w, self.same) + np.float(core_b)
             if cache:
-                self.z.append(self.pooling.pooling(out, self.pooling_size))
+                self.convolution_z.append(out)
+            # 激活
             out = self.sigmoid(out)
             pooling_data = {}
             if cache:
-                self.a.append(self.pooling.pooling(out, self.pooling_size))
+                self.convolution_a.append(out)
+            # 池化
             out = self.pooling.pooling(out, self.pooling_size, point=pooling_data)  # 池化
             if cache:
                 self.pooling_data.append(pooling_data)
+                self.z.append(out)
+                self.a.append(out)
+            # 输出
             outs.append(out)
         return outs
 
@@ -440,12 +444,20 @@ class CNNLayer(object):
         # 池化层反向传播误差
         cnnls = []
         for i in range(len(err)):
-            cnnls.append(self.pooling.upsample(err[i], self.pooling_size, self.pooling_data[i]))
+            d_a = self.pooling.upsample(err[i], self.pooling_size, self.pooling_data[i])
+            cnnls.append(np.array(d_a) * self.sigmoid_prime(self.convolution_z[i]))
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
         for i in range(self.core_num):
-            w = convolution(self.input_data, cnnls[i])
-            w = self.rot180(w)
+            if self.core_thickness > 1:
+                """
+                    三维卷积：误差分别与输入卷积得到三维卷积核的梯度
+                """
+                w = []
+                for j in range(self.core_thickness):
+                    w.append(convolution(self.input_data[j], cnnls[i]))
+            else:
+                w = convolution(self.input_data, cnnls[i])
             cnn_w.append(w)
         return np.array(cnn_w), np.array(cnn_b)
 
@@ -644,38 +656,25 @@ class Network(object):
 
 
 if __name__ == "__main__":
-    ############### 测试 max_pooling ########################
-    # test_data = [[int(np.random.rand() * 10) for y in range(8)] for x in range(8)]
-    # for i in test_data:
-    #     for j in i:
-    #         print(int(j), end=' ')
-    #     print()
-    # point = {}
-    # test_data = max_pooling.pooling(test_data, point=point)
-    # for i in test_data:
-    #     for j in i:
-    #         print(int(j), end=' ')
-    #     print()
-    # test_data = max_pooling.upsample(test_data, point=point)
-    # for i in test_data:
-    #     for j in i:
-    #         print(int(j), end=' ')
-    #     print()
-    ################################################################
     #################测试CNNLayer#################################
 
-    net = Network([CNNLayer(5, 3, ReLU, ReLU_prime), Layer(432, 10, sigmoid, sigmoid_prime)])
-    from my_data import my_data
-
-    my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
-    # print(my_data)
-    net.SGD(my_data, 50, 10, 0.05, monitor_training_accuracy=True, monitor_training_cost=True)
+    # net = Network([CNNLayer(5, 1, ReLU, ReLU_prime), Layer(144, 10, sigmoid, sigmoid_prime)])
+    # from my_data import my_data
+    #
+    # my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
+    # # print(my_data)
+    # net.SGD(my_data, 50, 10, 0.1, monitor_training_accuracy=True, monitor_training_cost=True)
 
     ##############################################################
-    # cnn = CNNLayer(5, 1, tanh, tanh_prime, core_thickness=3, same=True)
-    # data_in = np.random.randn(3, 28, 28)
-    # out = cnn.feedforward(data_in, cache=True)
-    # print(np.array(out).shape)
+    # cnn = CNNLayer(5, 1, tanh, tanh_prime, pooling_size=1)
+    # cnn.cores_b = [0, 0, 0]
+    # data_in = np.random.randn(10, 10)
+    # out = np.array(cnn.feedforward(data_in))
+    # out -= np.array(cnn.feedforward(data_in))
+    # out[0][0][0] += 1
+    # print(np.array(cnn.cores_w[0]))
+    # # print(np.array(out[0]))
+    # print(np.array(convolution_2D(data_in, out[0])))
 
     # err = np.random.randn(144)
     # dw, db = cnn.backprop(err)
@@ -684,3 +683,54 @@ if __name__ == "__main__":
     # print(np.average(np.array(dw).flat))
     # print(list(np.array(db).flat))
     # cnn.update(dw, db)
+
+    # data_in = np.random.randn(3, 3, 3)
+    # cnn = CNNLayer(2, 1, tanh, tanh_prime, core_thickness=3)
+    # _w = np.random.randn(1, 3, 2, 2)
+    # _b = np.random.randn(1)
+    # cnn.update(_w, _b)
+    # print('end')
+
+    #  ###############  单元测试：测试单个层的 feedforward && backprop 单层网络性能 ####################
+
+    # data_in = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]])
+    # test_layer = CNNLayer(2, 1, ReLU, tanh_prime, pooling_size=1)
+    # test_layer.cores_b = [0]
+    # test_layer.cores_w[0] = [[1, 2], [3, 4]]
+    # ou = test_layer.feedforward(data_in, cache=True)
+    # ou = test_layer.backprop(ou)
+    # print(ou)
+
+    import matplotlib.pyplot as plt
+
+    # 生成输入数据作为唯一样本
+    data_in = np.random.randn(3, 7, 7)
+    # 学习速率
+    eta = 0.05
+    # 收集没个学习周期（在线学习）的输出误差
+    plt_data = []
+    cost = []
+    # 期望输出向量，期望向量每个值相同
+    expect_value = 0.5
+    # 配置测试的层
+    test_layer = CNNLayer(2, 1, tanh, tanh_prime, pooling_size=2, core_thickness=3)
+
+    out = test_layer.feedforward(data_in)
+    for i in range(np.array(out).size):
+        plt_data.append([])
+    for ep in range(500):
+        out = test_layer.feedforward(data_in, cache=True)
+        out = np.array(out)
+        _sum = 0
+        for i, j in zip(list(out.flat), range(out.size)):
+            plt_data[j].append(i)
+            _sum += (i - expect_value) ** 2
+        cost.append(_sum)
+        _w, b = test_layer.backprop(out - expect_value)
+        test_layer.update(_w * eta, b * eta)
+    print(test_layer.feedforward(data_in))
+    for d in plt_data:
+        plt.plot(d)
+    plt.plot([0, 500], [0, 0], color='black')
+    plt.plot(cost)
+    plt.show()
