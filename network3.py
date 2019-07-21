@@ -143,14 +143,8 @@ def convolution_2D(a, b, same=False):
     if a.shape[0] < b.shape[0] and a.shape[1] < b.shape[1]:
         a, b = b, a
     if same:
-        x, y = a.shape
         x_b, y_b = b.shape
-        p = int((x_b - 1) / 2)
-        temp = np.zeros((x + 2 * p, y + 2 * p))
-        for w in range(x):
-            for h in range(y):
-                temp[w + p, h + p] = a[w][h]
-        a = temp
+        a = padding(a, x_b)
     x_a, y_a = a.shape
     x_b, y_b = b.shape
     if x_a > x_b and y_a > y_b:
@@ -186,6 +180,21 @@ def convolution(a, b, same=False):
             raise TypeError('参数维度过少：维度必须为 2 或 3，当前为{}'.format(len(a.shape)))
         else:
             raise TypeError('卷积核厚度必须与输入保持一致 输入：{} 卷积核{}'.format(a.shape[0], b.shape[0]))
+
+
+##############
+def padding(input_data, core_size):
+    input_data = np.array(input_data)
+    if len(input_data.shape) != 2:
+        raise TypeError('input_data 必须为二维数组！')
+    p = core_size - 1
+    x, y = input_data.shape
+    o = np.zeros((x + p, y + p))
+    p = int(p / 2)
+    for i in range(x):
+        for j in range(y):
+            o[p + i, p + j] = input_data[i, j]
+    return o
 
 
 # 输出层代价计算 && 输出层误差计算
@@ -445,7 +454,8 @@ class CNNLayer(object):
         cnnls = []  # 获得卷积层的误差
         for i in range(len(err)):
             d_a = self.pooling.upsample(err[i], self.pooling_size, self.pooling_data[i])
-            cnnls.append(np.array(d_a) * self.sigmoid_prime(self.convolution_z[i]))
+            # cnnls.append(np.array(d_a) * self.sigmoid_prime(self.convolution_z[i]))
+            cnnls.append(d_a)
         # 计算卷积层梯度
         cnn_b = [np.sum(cnnl) for cnnl in cnnls]
         cnn_w = []
@@ -466,40 +476,29 @@ class CNNLayer(object):
         if self.frozen:
             return
         self.cores_b = [b - db for b, db in zip(self.cores_b, delta_b)]
-        self.cores_w = [[[w * decay - dw for w, dw in zip(lw, ldw)] for lw, ldw in zip(wi, dwi)] for wi, dwi in
-                        zip(self.cores_w, delta_w)]
+        # self.cores_w = [[[w * decay - dw for w, dw in zip(lw, ldw)] for lw, ldw in zip(wi, dwi)] for wi, dwi in
+        #                 zip(self.cores_w, delta_w)]
+        self.cores_w = np.array(self.cores_w) - delta_w
 
     def front_layer_err(self, err, front_layer_z):
         err = np.array(err)
+        front_layer_z = np.array(front_layer_z)
         err = err.reshape((self.core_num, int(np.sqrt(err.size / self.core_num)), -1))
         # 池化层反向传播误差
         cnnls = []
-        outs = []
+        outs = np.zeros(front_layer_z.shape)
         for e in err:
             cnnls.append(self.pooling.upsample(e, self.pooling_size))
-        front_layer_z = np.array(front_layer_z)
-        if len(front_layer_z.shape) == 2:
-            front_layer_z = [front_layer_z]
-        for z in front_layer_z:
-            z = np.array(z)
-            z = self.sigmoid_prime(z)
-            out = np.zeros(z.shape)
-            for i in range(self.core_num):
-                if self.same:
-                    out += convolution(cnnls[i], self.rot180(self.cores_w[i]), same=True) * z
-                else:
-                    """
-                    此处由于same==False，前向传播途中输出比输入小，故反向传来的误差也比输入小
-                    这里将误差调整至与输入一致
-                    """
-                    p = int((self.core_size - 1) / 2)
-                    temp = np.zeros(z.shape)
-                    w, h = cnnls[i].shape
-                    for px in range(w):
-                        for py in range(h):
-                            temp[px + p, py + p] = cnnls[i][px][py]
-                    out += convolution(temp, self.rot180(self.cores_w[i]), same=True) * z
-            outs.append(out)
+
+        for core_w, e in zip(self.cores_w, cnnls):
+            e = padding(e, self.core_size)
+            if self.core_thickness > 1:
+                for i in range(self.core_thickness):
+                    outs[i] += convolution_2D(e, core_w[i], same=True)
+            else:
+                outs += convolution_2D(e, core_w, same=True)
+
+        outs = outs * self.sigmoid_prime(front_layer_z)
         return outs
 
 
@@ -673,11 +672,21 @@ class Network(object):
 if __name__ == "__main__":
     # ################ 测试 Network #################################
 
-    net = Network([CNNLayer(5, 1, tanh, tanh_prime), Layer(144, 10, sigmoid, sigmoid_prime)])
+    net = Network([CNNLayer(5, 3, tanh, tanh_prime), CNNLayer(5, 3, tanh, tanh_prime, core_thickness=3),
+                   Layer(48, 10, sigmoid, sigmoid_prime)])
     from my_data import my_data
 
     my_data = [(np.array(data[0]).reshape(28, -1), data[1]) for data in my_data]
     net.SGD(my_data, 50, 10, 0.05, monitor_training_accuracy=True, monitor_training_cost=True)
+
+    # ################ 测试 CNNLayer front_layer_err(err) ####################
+    # data_in = np.random.randn(3, 3, 3)
+    # print(data_in)
+    # layer = CNNLayer(2, 2, ReLU, ReLU_prime, core_thickness=3, pooling_size=1)
+    # out = layer.feedforward(data_in, cache=True)
+    # print(out)
+    # pe = layer.front_layer_err(out, data_in)
+    # print(pe)
 
     ##############################################################
     # cnn = CNNLayer(5, 1, tanh, tanh_prime, pooling_size=1)
