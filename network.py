@@ -204,8 +204,6 @@ if __name__ == "__main__":
     # 创建神经网络
     net = Network([784, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
 
-    net.load('net_data_3_3')
-
     from my_data import my_data
     import data_enhance
 
@@ -214,21 +212,11 @@ if __name__ == "__main__":
     validation_data = data_enhance.enhance(my_data, data_enhance.smooth)
 
     # 加载训练数据训练
-    # net.SGD(training_data, 10, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
+    net.SGD(training_data, 10, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
 
-    # net.save('net_data_2_1')
     # 加载验证数据集对网络效果进行验证
     n_validation = len(validation_data)  # 获得验证数据集大小
     num = net.evaluate(validation_data)  # 获得评估正确样本数
     # 打印结果
     print("验证：{0}/{1} {2}%".format(num, n_validation, num / n_validation * 100))
-
-    # net.save('net_data')
-    # net.save('net_data')
-    # 计算随机猜测的概率：10%左右
-    # num = net.evaluate(test_data)
-    # n_test = len(test_data)
-    # print("{0}/{1} {2}%".format(num, n_test, num / n_test * 100))
-    # for x, y in test_data:
-    #     print(np.argmax(net.feedforward(x)), y)
 
