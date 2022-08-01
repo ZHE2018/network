@@ -204,13 +204,6 @@ if __name__ == "__main__":
     # 创建神经网络
     net = Network([784, 30, 10])  # 输入层784 输出层10 固定，其他层可以任意
 
-    from my_data import my_data
-    import data_enhance
-
-    validation_data = my_data
-
-    validation_data = data_enhance.enhance(my_data, data_enhance.smooth)
-
     # 加载训练数据训练
     net.SGD(training_data, 10, 10, 1, test_data)  # 参数依次为：训练数据集、训练周期、小批量数据大小、学习速率（省略了测试数据集）
 
